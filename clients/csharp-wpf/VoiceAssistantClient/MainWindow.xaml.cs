@@ -16,9 +16,6 @@ namespace VoiceAssistantClient
     using System.Windows.Controls;
     using System.Windows.Input;
     using System.Windows.Threading;
-    using AdaptiveCards;
-    using AdaptiveCards.Rendering;
-    using AdaptiveCards.Rendering.Wpf;
     using Microsoft.Bot.Schema;
     using Microsoft.CognitiveServices.Speech;
     using Microsoft.CognitiveServices.Speech.Audio;
@@ -41,7 +38,6 @@ namespace VoiceAssistantClient
         private WakeWordConfiguration activeWakeWordConfig = null;
         private CustomSpeechConfiguration customSpeechConfig = null;
         private ListenState listening = ListenState.NotListening;
-        private AdaptiveCardRenderer renderer;
 
         public MainWindow()
         {
@@ -54,14 +50,6 @@ namespace VoiceAssistantClient
             this.DataContext = this;
             this.player.PlaybackStopped += this.Player_PlaybackStopped;
             Services.Tracker.Configure(this.settings).Apply();
-
-            this.renderer = new AdaptiveCardRenderer();
-            this.renderer.UseXceedElementRenderers();
-            var configFile = Path.Combine(System.Reflection.Assembly.GetExecutingAssembly().Location, "AdaptiveCardsHostConfig.json");
-            if (File.Exists(configFile))
-            {
-                this.renderer.HostConfig = AdaptiveHostConfig.FromJson(File.ReadAllText(configFile));
-            }
         }
 
         public event PropertyChangedEventHandler PropertyChanged;
@@ -419,69 +407,6 @@ namespace VoiceAssistantClient
                 {
                     Task.Run(() => this.PlayFromAudioQueue());
                 }
-            }
-
-            List<AdaptiveCard> cardsToBeRendered = new List<AdaptiveCard>();
-            if (activity.Attachments?.Any() is true)
-            {
-                cardsToBeRendered = activity.Attachments
-                    .Where(x => x.ContentType == AdaptiveCard.ContentType)
-                    .Select(x =>
-                       {
-                           try
-                           {
-                               var parseResult = AdaptiveCard.FromJson(x.Content.ToString());
-                               return parseResult.Card;
-                           }
-#pragma warning disable CA1031 // Do not catch general exception types
-                           catch (Exception ex)
-                           {
-                               this.ShowException(ex);
-                               return null;
-                           }
-#pragma warning restore CA1031 // Do not catch general exception types
-                       })
-                    .Where(x => x != null)
-                    .ToList();
-            }
-
-            this.RunOnUiThread(() =>
-            {
-                this.Activities.Add(new ActivityDisplay(json, activity, Sender.Bot));
-                if (activity.Type == ActivityTypes.Message || cardsToBeRendered?.Any() == true)
-                {
-                    var renderedCards = cardsToBeRendered.Select(x =>
-                        {
-                            var rendered = this.renderer.RenderCard(x);
-                            rendered.OnAction += this.RenderedCard_OnAction;
-                            rendered.OnMediaClicked += this.RenderedCard_OnMediaClicked;
-                            return rendered?.FrameworkElement;
-                        });
-                    this.Messages.Add(new MessageDisplay(activity.Text, Sender.Bot, renderedCards));
-                    this.ConversationView.ConversationHistory.ScrollIntoView(this.ConversationView.ConversationHistory.Items[this.ConversationView.ConversationHistory.Items.Count - 1]);
-                }
-            });
-        }
-
-        private void RenderedCard_OnMediaClicked(RenderedAdaptiveCard sender, AdaptiveMediaEventArgs e)
-        {
-            MessageBox.Show(this, JsonConvert.SerializeObject(e.Media), "Host received Media");
-        }
-
-        private void RenderedCard_OnAction(RenderedAdaptiveCard sender, AdaptiveActionEventArgs e)
-        {
-            if (e.Action is AdaptiveOpenUrlAction openUrlAction)
-            {
-                Process.Start(openUrlAction.Url.AbsoluteUri);
-            }
-            else if (e.Action is AdaptiveSubmitAction submitAction)
-            {
-                var inputs = sender.UserInputs.AsJson();
-
-                // Merge the Action.Submit Data property with the inputs
-                inputs.Merge(submitAction.Data);
-
-                MessageBox.Show(this, JsonConvert.SerializeObject(inputs, Formatting.Indented), "SubmitAction");
             }
         }
 
