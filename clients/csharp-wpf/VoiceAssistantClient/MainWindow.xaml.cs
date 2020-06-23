@@ -378,6 +378,16 @@ namespace VoiceAssistantClient
             var json = e.Activity;
             var activity = JsonConvert.DeserializeObject<Activity>(json);
 
+            this.RunOnUiThread(() =>
+            {
+                this.Activities.Add(new ActivityDisplay(json, activity, Sender.Bot));
+                if (activity.Type == ActivityTypes.Message)
+                {
+                    this.Messages.Add(new MessageDisplay(activity.Text, Sender.Bot));
+                    this.ConversationView.ConversationHistory.ScrollIntoView(this.ConversationView.ConversationHistory.Items[this.ConversationView.ConversationHistory.Items.Count - 1]);
+                }
+            });
+
             if (e.HasAudio && activity.Speak != null)
             {
                 var audio = e.Audio;
